@@ -80,7 +80,7 @@ static SSCrypto *crypto = nil;
 - (void)connectionDidClose:(MSShairportConnection *)connection {
 	DebugLog(@"Connection closed: %@", connection);
 	
-	[self.connections removeObject:connection];
+	[[self connections] removeObject:connection];
 }
 
 
@@ -93,7 +93,7 @@ static SSCrypto *crypto = nil;
 - (void)netService:(NSNetService *)sender didNotPublish:(NSDictionary *)errorDict {
 	[self stop];
 		
-	[self.delegate shairportServerDidEncounterError:[NSError errorWithDomain:[errorDict objectForKey:NSNetServicesErrorDomain] code:[[errorDict objectForKey:NSNetServicesErrorCode] integerValue] userInfo:nil] fatal:YES];
+	[[self delegate] shairportServerDidEncounterError:[NSError errorWithDomain:[errorDict objectForKey:NSNetServicesErrorDomain] code:[[errorDict objectForKey:NSNetServicesErrorCode] integerValue] userInfo:nil] fatal:YES];
 }
 
 
@@ -107,8 +107,8 @@ static SSCrypto *crypto = nil;
 
 + (MSShairportServer *)serverWithName:(NSString *)name password:(NSString *)password {
 	MSShairportServer *server = [[[self alloc] init] autorelease];
-	server.name = name;
-	server.password = password;
+	[server setName:name];
+	[server setPassword:password];
 	return server;
 }
 
@@ -116,7 +116,7 @@ static SSCrypto *crypto = nil;
 	self = [super init];
 	if(self == nil) return nil;
 	
-	self.connections = [NSMutableArray array];
+	[self setConnections:[NSMutableArray array]];
 	
 	return self;
 }
@@ -195,8 +195,8 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	CFSocketNativeHandle nativeSocketHandle = *(CFSocketNativeHandle *) data;
 	
 	MSShairportConnection *newConnection = [MSShairportConnection connectionWithSocketHandle:nativeSocketHandle addressData:addressData];
-	[self.connections addObject:newConnection];
-	newConnection.delegate = self;
+	[[self connections] addObject:newConnection];
+	[newConnection setDelegate:self];
 	
 	BOOL success = [newConnection open];
 	if(!success) {
@@ -218,7 +218,7 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 		[response setObject:challengeResponse forKey:@"Apple-Response"];
 	}
 	
-	if(self.password != nil) {
+	if([self password] != nil) {
 		// TODO: check auth
 	}
 	
@@ -233,10 +233,10 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	} else if([method hasPrefix:@"RECORD"]) {
 		// RECORD means the stream has started with hairtunes but it doesn't require any special response from us
 	} else if([method hasPrefix:@"FLUSH"]) {
-		[connection.decoderInputFileHandle writeData:[@"flush\n" dataUsingEncoding:NSASCIIStringEncoding]];
+		[[connection decoderInputFileHandle] writeData:[@"flush\n" dataUsingEncoding:NSASCIIStringEncoding]];
 	} else if([method hasPrefix:@"TEARDOWN"]) {
 		[response setObject:@"close" forKey:@"Connection"];
-		[connection.decoderInputFileHandle closeFile];
+		[[connection decoderInputFileHandle] closeFile];
 		shouldClose = YES;
 	} else if([method hasPrefix:@"SET_PARAMETER"]) {
 		[self handleSetParameterRequest:request connection:connection];
@@ -263,7 +263,7 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	
 	if(shouldClose) {
 		[connection close];
-		[self.connections removeObject:connection];
+		[[self connections] removeObject:connection];
 	}
 }
 
@@ -272,13 +272,13 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	NSMutableDictionary *body = [NSMutableDictionary dictionary];
 	[bodyString enumerateLinesUsingBlock:^(NSString *line, BOOL *stop) {
 		NSArray *pieces = [line componentsSeparatedByString:@"="];
-		if(pieces.count >= 2) {				
+		if([pieces count] >= 2) {				
 			NSMutableArray *remainingPieces = [pieces mutableCopy];
 			[remainingPieces removeObjectAtIndex:0];
 			NSString *value = [remainingPieces componentsJoinedByString:@""];
 			pieces = [value componentsSeparatedByString:@":"];
 			
-			if(pieces.count >= 2) {
+			if([pieces count] >= 2) {
 				[body setObject:[pieces objectAtIndex:1] forKey:[pieces objectAtIndex:0]];
 			}
 		}
@@ -286,7 +286,7 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	
 	NSString *aesIV = [body objectForKey:@"aesiv"];
 	NSParameterAssert(aesIV != nil);
-	connection.aesIV = [NSData dataFromBase64String:aesIV];
+	[connection setAesIV:[NSData dataFromBase64String:aesIV]];
 	
 	NSString *rsaaesKey = [body objectForKey:@"rsaaeskey"];
 	NSParameterAssert(rsaaesKey != nil);
@@ -295,9 +295,9 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	[crypto setCipherText:[rsaaesKey dataUsingEncoding:NSISOLatin1StringEncoding]];
 	NSData *aesKey = [crypto decrypt];
 	NSParameterAssert(aesKey != nil);
-	connection.aesKey = aesKey;
+	[connection setAesKey:aesKey];
 	
-	connection.fmtp = [body objectForKey:@"fmtp"];
+	[connection setFmtp:[body objectForKey:@"fmtp"]];
 }
 
 - (void)handleSetupRequest:(NSDictionary *)request connection:(MSShairportConnection *)connection response:(NSMutableDictionary *)response {
@@ -308,7 +308,7 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	NSMutableDictionary *transportValues = [NSMutableDictionary dictionary];
 	for(NSString *piece in pieces) {
 		NSArray *pair = [piece componentsSeparatedByString:@"="];
-		if(pair.count >= 2) {
+		if([pair count] >= 2) {
 			[transportValues setObject:[pair objectAtIndex:1] forKey:[pair objectAtIndex:0]];
 		}
 	}
@@ -320,14 +320,14 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 		dport = tport;
 	}
 	
-	NSString *iv = [connection.aesIV stringWithHexBytes];
-	NSString *key = [connection.aesKey stringWithHexBytes];
+	NSString *iv = [[connection aesIV] stringWithHexBytes];
+	NSString *key = [[connection aesKey] stringWithHexBytes];
 	
 	NSString *path = [[NSBundle mainBundle] pathForAuxiliaryExecutable:@"hairtunes"];
 	NSTask *task = [[NSTask alloc] init];
 	[task setLaunchPath:path];
 	
-	NSArray *arguments = [NSArray arrayWithObjects:@"tport", tport, @"iv", iv, @"cport", cport, @"fmtp", connection.fmtp, @"dport", dport, @"key", key, nil];
+	NSArray *arguments = [NSArray arrayWithObjects:@"tport", tport, @"iv", iv, @"cport", cport, @"fmtp", [connection fmtp], @"dport", dport, @"key", key, nil];
 	[task setArguments:arguments];
 	
 	NSPipe *outputPipe = [NSPipe pipe];
@@ -338,7 +338,7 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	[task setStandardInput:inputPipe];
 	NSFileHandle *inputFileHandle = [inputPipe fileHandleForWriting];
 	
-	connection.decoderInputFileHandle = inputFileHandle;
+	[connection setDecoderInputFileHandle:inputFileHandle];
 	
 	[task launch];
 	
@@ -374,18 +374,18 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	NSMutableDictionary *body = [NSMutableDictionary dictionary];
 	[bodyString enumerateLinesUsingBlock:^(NSString *line, BOOL *stop) {
 		NSArray *pieces = [line componentsSeparatedByString:@": "];
-		if(pieces.count >= 2) {				
+		if([pieces count] >= 2) {				
 			[body setObject:[pieces objectAtIndex:1] forKey:[pieces objectAtIndex:0]];
 		}
 	}];
 	
-	[connection.decoderInputFileHandle writeData:[[NSString stringWithFormat:@"vol: %f\n", [[body objectForKey:@"volume"] floatValue]] dataUsingEncoding:NSASCIIStringEncoding]];
+	[[connection decoderInputFileHandle] writeData:[[NSString stringWithFormat:@"vol: %f\n", [[body objectForKey:@"volume"] floatValue]] dataUsingEncoding:NSASCIIStringEncoding]];
 }
 
 - (void)stop {
-	for(MSShairportConnection *connection in self.connections) {
+	for(MSShairportConnection *connection in [self connections]) {
 		[connection close];
-		[self.connections removeObject:connection];
+		[[self connections] removeObject:connection];
 	}
 	
 	[self shutdownServer];
@@ -407,13 +407,13 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 			firstLine = NO;
 		} else {
 			if(!isBody) {
-				if(line.length < 1) {
+				if([line length] < 1) {
 					isBody = YES;
 					return;
 				}
 				
 				NSArray *components = [line componentsSeparatedByString:@":"];
-				if(components.count > 1) {
+				if([components count] > 1) {
 					NSString *key = [[components objectAtIndex:0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
 					NSString *value = [[components objectAtIndex:1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
 					[dictionary setObject:value forKey:key];
@@ -436,15 +436,15 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	NSMutableString *challengeString = [[[NSString alloc] initWithData:challengeData encoding:NSISOLatin1StringEncoding] mutableCopy];
 	
 	// connection.remoteIP = fe80::5a55:caff:fef3:1499
-    if ([connection.remoteIP hasPrefix:@"::ffff:"]) {
-        NSString* ip4 = [connection.remoteIP substringFromIndex:7];
+    if ([[connection remoteIP] hasPrefix:@"::ffff:"]) {
+        NSString* ip4 = [[connection remoteIP] substringFromIndex:7];
         NSArray* pieces = [ip4 componentsSeparatedByString:@"."];
         for(NSString* piece in pieces) {
             unsigned short value = (unsigned short)[piece integerValue]; 
             [challengeString appendFormat: @"%C", value];
         }
     } else {
-        NSArray *ipPieces = [connection.remoteIP componentsSeparatedByString:@"::"];
+        NSArray *ipPieces = [[connection remoteIP] componentsSeparatedByString:@"::"];
         // ipPieces = [fe80, 5a55:caff:fef3:1499
         
         NSArray *leftPieces = [[ipPieces objectAtIndex:0] componentsSeparatedByString:@":"];
@@ -453,7 +453,7 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
         
         // most IPv6 address will be abbreviated, iTunes wants the full address so we'll expand it out
         NSMutableArray *paddingPieces = [NSMutableArray array];
-        NSUInteger padding = 8 - (leftPieces.count + rightPieces.count);
+        NSUInteger padding = 8 - ([leftPieces count] + [rightPieces count]);
         for(NSUInteger i = 0; i < padding; i++) {
             [paddingPieces addObject:@"0x0"];
         }
@@ -500,8 +500,8 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 }
 
 - (BOOL)publishService {
- 	self.netService = [[NSNetService alloc] initWithDomain:@"" type:@"_raop._tcp" name:[NSString stringWithFormat:@"%@@%@", [self MACAddressToRawString], self.name] port:MSShairportServerPort];
-	if(self.netService == nil) return NO;
+ 	[self setNetService:[[NSNetService alloc] initWithDomain:@"" type:@"_raop._tcp" name:[NSString stringWithFormat:@"%@@%@", [self MACAddressToRawString], [self name]] port:MSShairportServerPort]];
+	if([self netService] == nil) return NO;
 	
 	// "tp=UDP","sm=false","sv=false","ek=1","et=0,1","cn=0,1","ch=2","ss=16","sr=44100","pw=false","vn=3","txtvers=1"
 	NSMutableDictionary *txtData = [NSMutableDictionary dictionary];
@@ -518,19 +518,19 @@ static void serverAcceptCallback(CFSocketRef socket, CFSocketCallBackType type, 
 	[txtData setObject:@"3" forKey:@"vn"];
 	[txtData setObject:@"1" forKey:@"txtvers"];
 	
-	[self.netService setTXTRecordData:[NSNetService dataFromTXTRecordDictionary:txtData]];
+	[[self netService] setTXTRecordData:[NSNetService dataFromTXTRecordDictionary:txtData]];
 	
-	[self.netService scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-	[self.netService setDelegate:self];
-	[self.netService publish];
+	[[self netService] scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+	[[self netService] setDelegate:self];
+	[[self netService] publish];
 	
 	return YES;
 }
 
 - (void)unpublishService {
-	[self.netService stop];
-	[self.netService removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-	self.netService = nil;
+	[[self netService] stop];
+	[[self netService] removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+	[self setNetService:nil];
 }
 
 - (NSString *)MACAddressToRawString {

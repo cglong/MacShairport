@@ -33,7 +33,7 @@ void writeStreamEventHandler(CFWriteStreamRef stream, CFStreamEventType eventTyp
 #pragma mark NSObject
 
 - (NSString *)description {
-	return [NSString stringWithFormat:@"<%@: %p> remoteIP: %@", NSStringFromClass([self class]), self, self.remoteIP];
+	return [NSString stringWithFormat:@"<%@: %p> remoteIP: %@", NSStringFromClass([self class]), self, [self remoteIP]];
 }
 
 
@@ -84,7 +84,7 @@ void writeStreamEventHandler(CFWriteStreamRef stream, CFStreamEventType eventTyp
 		return nil;
 	}
 	
-	self.remoteIP = [NSString stringWithCString:addressBuffer encoding:NSASCIIStringEncoding];
+	[self setRemoteIP:[NSString stringWithCString:addressBuffer encoding:NSASCIIStringEncoding]];
 		
 	return self;
 }
@@ -92,7 +92,7 @@ void writeStreamEventHandler(CFWriteStreamRef stream, CFStreamEventType eventTyp
 - (BOOL)open {
 	CFStreamCreatePairWithSocket(kCFAllocatorDefault, socketHandle, &readStream, &writeStream);
 	
-	self.outgoingData = [NSMutableData data];
+	[self setOutgoingData:[NSMutableData data]];
 	
 	CFReadStreamSetProperty(readStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanTrue);
 	CFWriteStreamSetProperty(writeStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanTrue);
@@ -133,11 +133,11 @@ void writeStreamEventHandler(CFWriteStreamRef stream, CFStreamEventType eventTyp
 		writeStream = NULL;
 	}
 	
-	self.outgoingData = nil;
+	[self setOutgoingData:nil];
 }
 
 - (void)sendResponse:(NSData *)data {
-	[self.outgoingData appendData:data];
+	[[self outgoingData] appendData:data];
 	
 	// Try to actually write the data to the stream. If it fails then we can assume we'll get a kCFStreamEventCanAcceptBytes callback later on.
 	[self writeOutgoingBufferToStream];
@@ -150,12 +150,12 @@ void readStreamEventHandler(CFReadStreamRef stream, CFStreamEventType eventType,
 
 - (void)readStreamHandleEvent:(CFStreamEventType)event {
 	if(event == kCFStreamEventOpenCompleted) {
-		self.readStreamOpen = YES;
+		[self setReadStreamOpen:YES];
 	} else if(event == kCFStreamEventHasBytesAvailable) {
 		[self readFromStreamIntoIncomingBuffer];
 	} else if(event == kCFStreamEventEndEncountered || event == kCFStreamEventErrorOccurred) {
 		[self close];		
-		[self.delegate connectionDidClose:self];
+		[[self delegate] connectionDidClose:self];
 	}
 }
 
@@ -166,14 +166,14 @@ void readStreamEventHandler(CFReadStreamRef stream, CFStreamEventType eventType,
 		CFIndex length = CFReadStreamRead(readStream, buffer, sizeof(buffer));
 		if(length <= 0) {
 			[self close];
-			[self.delegate connectionDidClose:self];
+			[[self delegate] connectionDidClose:self];
 			return;
 		}
 		
 		[incomingData appendBytes:buffer length:(NSUInteger) length];
 	}
 	
-	[self.delegate connection:self didReceiveData:incomingData];
+	[[self delegate] connection:self didReceiveData:incomingData];
 }
 
 void writeStreamEventHandler(CFWriteStreamRef stream, CFStreamEventType eventType, void *info) {
@@ -183,21 +183,21 @@ void writeStreamEventHandler(CFWriteStreamRef stream, CFStreamEventType eventTyp
 
 - (void)writeStreamHandleEvent:(CFStreamEventType)event {
 	if(event == kCFStreamEventOpenCompleted) {
-		self.writeStreamOpen = YES;
+		[self setWriteStreamOpen:YES];
 	} else if(event == kCFStreamEventCanAcceptBytes) {
 		[self writeOutgoingBufferToStream];
 	} else if(event == kCFStreamEventEndEncountered || event == kCFStreamEventErrorOccurred) {
 		[self close];
-		[self.delegate connectionDidClose:self];
+		[[self delegate] connectionDidClose:self];
 	}
 }
 
 - (void)writeOutgoingBufferToStream {
-	if(!self.readStreamOpen || !self.writeStreamOpen) {
+	if(![self readStreamOpen] || ![self writeStreamOpen]) {
 		return;
 	}
 	
-	if([self.outgoingData length] == 0) {
+	if([[self outgoingData] length] == 0) {
 		return;
 	}
 	
@@ -205,15 +205,15 @@ void writeStreamEventHandler(CFWriteStreamRef stream, CFStreamEventType eventTyp
 		return;
 	}
 	
-	CFIndex writtenBytes = CFWriteStreamWrite(writeStream, [self.outgoingData bytes], (CFIndex) [self.outgoingData length]);
+	CFIndex writtenBytes = CFWriteStreamWrite(writeStream, [[self outgoingData] bytes], (CFIndex) [[self outgoingData] length]);
 	if(writtenBytes == -1) {
 		[self close];
-		[self.delegate connectionDidClose:self];
+		[[self delegate] connectionDidClose:self];
 		return;
 	}
 	
 	NSRange range = {0, (NSUInteger) writtenBytes};
-	[self.outgoingData replaceBytesInRange:range withBytes:NULL length:0];
+	[[self outgoingData] replaceBytesInRange:range withBytes:NULL length:0];
 }
 
 @end
