@@ -11,7 +11,12 @@
 static NSString * const MacShairportAppDelegateDefaultPassword = nil;
 
 @interface MacShairportAppDelegate ()
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1050
 @property (nonatomic, retain) MSShairportServer *server;
+#else
+- (MSShairportServer *)server;
+- (void)setServer:(MSShairportServer *)server;
+#endif
 @end
 
 

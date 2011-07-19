@@ -14,10 +14,20 @@ void readStreamEventHandler(CFReadStreamRef stream, CFStreamEventType eventType,
 void writeStreamEventHandler(CFWriteStreamRef stream, CFStreamEventType eventType, void *info);
 
 @interface MSShairportConnection ()
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1050
 @property (nonatomic, retain) NSMutableData *outgoingData;
 @property (nonatomic, assign) BOOL readStreamOpen;
 @property (nonatomic, assign) BOOL writeStreamOpen;
 @property (nonatomic, copy) NSString *remoteIP;
+#else
+- (NSMutableData *)outgoingData;
+- (void)setOutgoingData:(NSMutableData *)outgoingData;
+- (BOOL)readStreamOpen;
+- (void)setReadStreamOpen:(BOOL)readStreamOpen;
+- (BOOL)writeStreamOpen;
+- (void)setWriteStreamOpen:(BOOL)writeStreamOpen;
+- (void)setRemoteIP:(NSString *)remoteIP;
+#endif
 
 - (id)initWithSocketHandle:(CFSocketNativeHandle)handle addressData:(NSData *)addressData;
 - (void)readStreamHandleEvent:(CFStreamEventType)event;

@@ -25,10 +25,21 @@ static NSString * const MSShairportServerMACAddress = @"fe:dc:ba:98:75:50";
 static SSCrypto *crypto = nil;
 
 @interface MSShairportServer ()
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1050
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic, copy) NSString *password;
 @property (nonatomic, retain) NSMutableArray *connections;
 @property (nonatomic, retain) NSNetService *netService;
+#else
+- (NSString *)name;
+- (void)setName:(NSString *)name;
+- (NSString *)password;
+- (void)setPassword:(NSString *)password;
+- (NSMutableArray *)connections;
+- (void)setConnections:(NSMutableArray *)connections;
+- (NSNetService *)netService;
+- (void)setNetService:(NSNetService *)netService;
+#endif
 
 - (BOOL)createServer;
 - (BOOL)publishService;

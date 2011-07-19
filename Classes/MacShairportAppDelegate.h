@@ -16,6 +16,11 @@
     NSWindow *window;
 }
 
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1050
 @property (assign) IBOutlet NSWindow *window;
+#else
+- (NSWindow *)window;
+- (void)setWindow:(NSWindow *)window;
+#endif
 
 @end
